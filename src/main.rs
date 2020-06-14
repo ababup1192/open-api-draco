@@ -1,6 +1,8 @@
 extern crate yaml_rust;
 use yaml_rust::{YamlEmitter, YamlLoader};
 extern crate regex;
+#[macro_use]
+extern crate maplit;
 
 fn main() {
   let s = "
@@ -37,41 +39,75 @@ bar:
 }
 
 pub mod apis {
+  use std::collections::HashMap;
+
   #[derive(PartialEq, Debug)]
   pub struct Api {
     pub path: String,
+    pub param_map: HashMap<String, ParamType>,
   }
+
+  #[derive(PartialEq, Debug)]
+  pub enum ParamType {
+    Integer,
+    String,
+  }
+
   pub fn from_yaml(yaml: &yaml_rust::Yaml) -> Vec<Api> {
-    yaml["paths"]
-      .clone()
+    let paths = &yaml["paths"];
+
+    fn create_param_tuple(param: yaml_rust::Yaml) -> (String, ParamType) {
+      let schema_type = param["schema"]["type"].as_str();
+      (
+        param["name"].as_str().unwrap().to_string(),
+        match schema_type {
+          Some("integer") => ParamType::Integer,
+          Some("string") => ParamType::String,
+          _ => panic!("unexpected schema type: {}", schema_type.unwrap_or("None")),
+        },
+      )
+    };
+
+    paths
       .as_hash()
       .unwrap()
       .keys()
-      .map(|path| Api {
-        path: path.as_str().unwrap().to_string(),
+      .map(|path| {
+        let path = path.as_str().unwrap();
+        Api {
+          path: path.to_string(),
+          param_map: paths[path]["parameters"]
+            .clone()
+            .into_iter()
+            .map(create_param_tuple)
+            .collect::<HashMap<_, _>>(),
+        }
       })
       .collect()
   }
-
-  pub fn to_scala_path(api: Api) -> String {
+  pub fn to_play_path(api: Api) -> String {
     use regex::Regex;
 
-    let path_vec: Vec<_> = api
+    let modify_identifer = (|| {
+      let variable_reg = Regex::new(r"^\{.*\}$").unwrap();
+      let blace_reg = Regex::new(r"[{}]").unwrap();
+
+      let f = move |variable: String| {
+        if variable_reg.is_match(&variable) {
+          format!(":{}", blace_reg.replace_all(&variable, ""))
+        } else {
+          variable
+        }
+      };
+      f
+    })();
+
+    api
       .path
       .split("/")
-      .map(|variable| {
-        let variable_reg = Regex::new(r"^\{.*\}$").unwrap();
-        let blace_reg = Regex::new(r"[{}]").unwrap();
-
-        if variable_reg.is_match(variable) {
-          format!(":{}", blace_reg.replace_all(variable, ""))
-        } else {
-          variable.to_string()
-        }
-      })
-      .collect();
-
-    path_vec.join("/")
+      .map(|variable| modify_identifer(variable.to_string()))
+      .collect::<Vec<String>>()
+      .join("/")
   }
 
   #[cfg(test)]
@@ -93,10 +129,11 @@ pub mod apis {
           '/users/{userId}':
             parameters:
               - schema:
-                  type: integer
+                  type: string
                 name: userId
                 in: path
                 required: true
+              
             get:
               summary: 候補者詳細GET
               tags: []
@@ -150,6 +187,7 @@ pub mod apis {
 
       let vec: Vec<Api> = vec![Api {
         path: "/users/{userId}".to_string(),
+        param_map: hashmap! {"userId".to_string() => ParamType::String},
       }];
 
       assert!(vec == from_yaml(&doc));
@@ -157,11 +195,12 @@ pub mod apis {
   }
 
   #[test]
-  fn it_to_scala_path() {
+  fn it_to_play_path() {
     let api = Api {
       path: "/users/{userId}".to_string(),
+      param_map: HashMap::new(),
     };
 
-    assert_eq!("/users/:userId", to_scala_path(api));
+    assert_eq!("/users/:userId", to_play_path(api));
   }
 }
