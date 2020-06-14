@@ -45,12 +45,35 @@ pub mod apis {
   pub struct Api {
     pub path: String,
     pub param_map: HashMap<String, ParamType>,
+    pub method_map: HashMap<String, Method>,
   }
 
   #[derive(PartialEq, Debug)]
   pub enum ParamType {
     Integer,
     String,
+  }
+
+  #[derive(PartialEq, Debug)]
+  pub struct Method {
+    pub summary: String,
+    pub response_opt: Option<Content>,
+  }
+
+  #[derive(PartialEq, Debug)]
+  pub enum Content {
+    Array(Vec<Content>),
+    Object(Vec<Property>),
+    String,
+    Integer,
+    Number,
+    Boolean,
+  }
+
+  #[derive(PartialEq, Debug)]
+  pub struct Property {
+    pub key: String,
+    pub value: Content,
   }
 
   pub fn from_yaml(yaml: &yaml_rust::Yaml) -> Vec<Api> {
@@ -68,18 +91,90 @@ pub mod apis {
       )
     };
 
+    fn create_method(method: yaml_rust::Yaml) -> Method {
+      let response_schema =
+        method["responses"]["200"]["content"]["application/json"]["schema"].clone();
+
+      Method {
+        summary: method["summary"]
+          .as_str()
+          .and_then(|summary| {
+            if summary.trim().is_empty() {
+              None
+            } else {
+              Some(summary)
+            }
+          })
+          .expect("summary is empty")
+          .to_string(),
+        response_opt: response_schema["type"].as_str().and_then(|schema_type| {
+          if schema_type == "object" {
+            let property_keys = response_schema["properties"]
+              .as_hash()
+              .expect("can not get object properties")
+              .keys()
+              .map(|key| key.as_str().unwrap())
+              .collect::<Vec<_>>();
+
+            let properties = property_keys
+              .into_iter()
+              .map(|key| Property {
+                key: key.to_string(),
+                value: {
+                  let prop_type_text = response_schema["properties"][key]["type"].as_str();
+
+                  match prop_type_text {
+                    Some("string") => Content::String,
+                    Some("integer") => Content::Integer,
+                    _ => panic!(
+                      "unsuppoted property type: ({}: {})",
+                      key,
+                      prop_type_text.unwrap_or("None")
+                    ),
+                  }
+                },
+              })
+              .collect::<Vec<_>>();
+
+            Some(Content::Object(properties))
+          } else {
+            None
+          }
+        }),
+      }
+    }
+
     paths
       .as_hash()
-      .unwrap()
+      .expect("can not parse hash from paths")
       .keys()
       .map(|path| {
-        let path = path.as_str().unwrap();
+        let path = path.as_str().expect("can not get path");
+        let path_methods = paths[path]
+          .as_hash()
+          .into_iter()
+          .flat_map(|path_methods| path_methods.keys());
+
         Api {
           path: path.to_string(),
           param_map: paths[path]["parameters"]
             .clone()
             .into_iter()
             .map(create_param_tuple)
+            .collect::<HashMap<_, _>>(),
+          method_map: path_methods
+            .map(|method| {
+              method
+                .as_str()
+                .expect("can not get path methods(get, post, ...)")
+            })
+            .filter(|method| method != &"parameters")
+            .map(|method| {
+              (
+                method.to_string(),
+                create_method(paths[path][method].clone()),
+              )
+            })
             .collect::<HashMap<_, _>>(),
         }
       })
@@ -149,12 +244,10 @@ pub mod apis {
                           hogeId:
                             type: string
                           foo:
-                            type:
-                              - 'null'
-                              - integer
+                            type: integer
               operationId: get-users-userId
             put:
-              summary: 候補者詳細POST
+              summary: 候補者詳細PUT
               operationId: put-users-userId
               responses:
                 '200':
@@ -188,6 +281,18 @@ pub mod apis {
       let vec: Vec<Api> = vec![Api {
         path: "/users/{userId}".to_string(),
         param_map: hashmap! {"userId".to_string() => ParamType::String},
+        method_map: hashmap! {
+          "get".to_string() => Method{
+            summary: "候補者詳細GET".to_string(),
+            response_opt: Some(Content::Object(vec![
+              Property{key: "hogeId".to_string(), value: Content::String},
+              Property{key: "foo".to_string(), value: Content::Integer}
+            ]))
+           },
+          "put".to_string() => Method{
+            summary: "候補者詳細PUT".to_string(),
+            response_opt:  None         },
+        },
       }];
 
       assert!(vec == from_yaml(&doc));
@@ -199,6 +304,7 @@ pub mod apis {
     let api = Api {
       path: "/users/{userId}".to_string(),
       param_map: HashMap::new(),
+      method_map: HashMap::new(),
     };
 
     assert_eq!("/users/:userId", to_play_path(api));
