@@ -295,7 +295,7 @@ pub mod apis {
         },
       }];
 
-      assert!(vec == from_yaml(&doc));
+      assert_eq!(vec, from_yaml(&doc));
     }
   }
 
