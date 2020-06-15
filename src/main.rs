@@ -99,21 +99,10 @@ pub mod apis {
       let response_schema =
         method["responses"]["200"]["content"]["application/json"]["schema"].clone();
 
-      Method {
-        summary: method["summary"]
-          .as_str()
-          .and_then(|summary| {
-            if summary.trim().is_empty() {
-              None
-            } else {
-              Some(summary)
-            }
-          })
-          .expect("summary is empty")
-          .to_string(),
-        response_opt: response_schema["type"].as_str().and_then(|schema_type| {
+      fn create_schema(base_doument: yaml_rust::Yaml) -> Option<Content> {
+        base_doument["type"].as_str().and_then(|schema_type| {
           if schema_type == "object" {
-            let property_keys = response_schema["properties"]
+            let property_keys = base_doument["properties"]
               .as_hash()
               .expect("can not get object properties")
               .keys()
@@ -125,7 +114,7 @@ pub mod apis {
               .map(|key| Property {
                 key: key.to_string(),
                 value: {
-                  let prop_type_text = response_schema["properties"][key]["type"].as_str();
+                  let prop_type_text = base_doument["properties"][key]["type"].as_str();
 
                   match prop_type_text {
                     Some("string") => Content::String,
@@ -144,43 +133,23 @@ pub mod apis {
           } else {
             None
           }
-        }),
-        request_body_opt: request_body_schema["type"]
+        })
+      }
+
+      Method {
+        summary: method["summary"]
           .as_str()
-          .and_then(|schema_type| {
-            if schema_type == "object" {
-              let property_keys = request_body_schema["properties"]
-                .as_hash()
-                .expect("can not get object properties")
-                .keys()
-                .map(|key| key.as_str().unwrap())
-                .collect::<Vec<_>>();
-
-              let properties = property_keys
-                .into_iter()
-                .map(|key| Property {
-                  key: key.to_string(),
-                  value: {
-                    let prop_type_text = request_body_schema["properties"][key]["type"].as_str();
-
-                    match prop_type_text {
-                      Some("string") => Content::String,
-                      Some("integer") => Content::Integer,
-                      _ => panic!(
-                        "unsuppoted property type: ({}: {})",
-                        key,
-                        prop_type_text.unwrap_or("None")
-                      ),
-                    }
-                  },
-                })
-                .collect::<Vec<_>>();
-
-              Some(Content::Object(properties))
-            } else {
+          .and_then(|summary| {
+            if summary.trim().is_empty() {
               None
+            } else {
+              Some(summary)
             }
-          }),
+          })
+          .expect("summary is empty")
+          .to_string(),
+        response_opt: create_schema(response_schema),
+        request_body_opt: create_schema(request_body_schema),
       }
     }
 
