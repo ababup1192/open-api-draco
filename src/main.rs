@@ -58,6 +58,7 @@ pub mod apis {
   pub struct Method {
     pub summary: String,
     pub response_opt: Option<Content>,
+    pub request_body_opt: Option<Content>,
   }
 
   #[derive(PartialEq, Debug)]
@@ -92,6 +93,9 @@ pub mod apis {
     };
 
     fn create_method(method: yaml_rust::Yaml) -> Method {
+      let request_body_schema =
+        method["requestBody"]["content"]["application/json"]["schema"].clone();
+
       let response_schema =
         method["responses"]["200"]["content"]["application/json"]["schema"].clone();
 
@@ -141,6 +145,42 @@ pub mod apis {
             None
           }
         }),
+        request_body_opt: request_body_schema["type"]
+          .as_str()
+          .and_then(|schema_type| {
+            if schema_type == "object" {
+              let property_keys = request_body_schema["properties"]
+                .as_hash()
+                .expect("can not get object properties")
+                .keys()
+                .map(|key| key.as_str().unwrap())
+                .collect::<Vec<_>>();
+
+              let properties = property_keys
+                .into_iter()
+                .map(|key| Property {
+                  key: key.to_string(),
+                  value: {
+                    let prop_type_text = request_body_schema["properties"][key]["type"].as_str();
+
+                    match prop_type_text {
+                      Some("string") => Content::String,
+                      Some("integer") => Content::Integer,
+                      _ => panic!(
+                        "unsuppoted property type: ({}: {})",
+                        key,
+                        prop_type_text.unwrap_or("None")
+                      ),
+                    }
+                  },
+                })
+                .collect::<Vec<_>>();
+
+              Some(Content::Object(properties))
+            } else {
+              None
+            }
+          }),
       }
     }
 
@@ -268,7 +308,6 @@ pub mod apis {
                             - A
                             - B
                             - NG
-                        '': {}
         components:
           schemas: {}
             ";
@@ -287,11 +326,17 @@ pub mod apis {
             response_opt: Some(Content::Object(vec![
               Property{key: "hogeId".to_string(), value: Content::String},
               Property{key: "foo".to_string(), value: Content::Integer}
-            ]))
+            ])),
+           request_body_opt: None
            },
           "put".to_string() => Method{
             summary: "候補者詳細PUT".to_string(),
-            response_opt:  None         },
+            response_opt:  None,
+            request_body_opt:  Some(Content::Object(vec![
+              Property{key: "hasDateAndPlace".to_string(), value: Content::String},
+              Property{key: "location".to_string(), value: Content::String}
+            ]))
+          },
         },
       }];
 
