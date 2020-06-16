@@ -41,29 +41,30 @@ bar:
 pub mod apis {
   use std::collections::HashMap;
 
-  #[derive(PartialEq, Debug)]
+  #[derive(PartialEq, Clone, Debug)]
   pub struct Api {
     pub path: String,
     pub param_map: HashMap<String, ParamType>,
     pub method_map: HashMap<String, Method>,
   }
 
-  #[derive(PartialEq, Debug)]
+  #[derive(PartialEq, Clone, Debug)]
   pub enum ParamType {
     Integer,
     String,
   }
 
-  #[derive(PartialEq, Debug)]
+  #[derive(PartialEq, Clone, Debug)]
   pub struct Method {
+    pub operation_id: String,
     pub summary: String,
     pub response_opt: Option<Content>,
     pub request_body_opt: Option<Content>,
   }
 
-  #[derive(PartialEq, Debug)]
+  #[derive(PartialEq, Clone, Debug)]
   pub enum Content {
-    Array(Vec<Content>),
+    Array(Box<Content>),
     Object(Vec<Property>),
     String,
     Integer,
@@ -71,7 +72,7 @@ pub mod apis {
     Boolean,
   }
 
-  #[derive(PartialEq, Debug)]
+  #[derive(PartialEq, Clone, Debug)]
   pub struct Property {
     pub key: String,
     pub value: Content,
@@ -137,6 +138,7 @@ pub mod apis {
       }
 
       Method {
+        operation_id: method["operationId"].as_str().unwrap().to_string(),
         summary: method["summary"]
           .as_str()
           .and_then(|summary| {
@@ -189,7 +191,7 @@ pub mod apis {
       })
       .collect()
   }
-  pub fn to_play_path(api: Api) -> String {
+  pub fn nomalize_play_variable_path(path: String) -> String {
     use regex::Regex;
 
     let modify_identifer = (|| {
@@ -206,12 +208,87 @@ pub mod apis {
       f
     })();
 
-    api
-      .path
+    path
       .split("/")
       .map(|variable| modify_identifer(variable.to_string()))
       .collect::<Vec<String>>()
       .join("/")
+  }
+
+  pub fn to_play_routings(api: Api) -> Vec<String> {
+    api
+      .method_map
+      .clone()
+      .keys()
+      .into_iter()
+      .map(|method_type| {
+        format!(
+          "{} {} {{Method Name}}({})",
+          match &method_type[..] {
+            "get" => "GET",
+            "put" => "PUT",
+            m => panic!("unsupported method type {}", m),
+          },
+          nomalize_play_variable_path(api.path.clone()),
+          api
+            .clone()
+            .param_map
+            .into_iter()
+            .map(|(param, param_type)| format!(
+              "{}: {}",
+              param,
+              match param_type {
+                ParamType::String => "String",
+                ParamType::Integer => "Long",
+              }
+            ))
+            .collect::<Vec<_>>()
+            .join(", ")
+        )
+      })
+      .collect()
+  }
+
+  pub fn generate_command_scala(method: Method) -> Option<String> {
+    fn content_to_string(content: Content) -> String {
+      match content {
+        Content::Object(properties) => properties
+          .into_iter()
+          .map(|property| format!("{}: {}", property.key, content_to_string(property.value)))
+          .collect::<Vec<_>>()
+          .join(",\n"),
+        Content::String => "String".to_string(),
+        Content::Integer => "Int or Long".to_string(),
+        Content::Number => "Float".to_string(),
+        Content::Boolean => "Boolean".to_string(),
+        Content::Array(content) => content_to_string(*content),
+      }
+    }
+
+    method
+      .request_body_opt
+      .map(|request_body| format!("case class Class({})", content_to_string(request_body)))
+  }
+
+  pub fn generate_command_ts(method: Method) -> Option<String> {
+    fn content_to_string(content: Content) -> String {
+      match content {
+        Content::Object(properties) => properties
+          .into_iter()
+          .map(|property| format!("{}: {}", property.key, content_to_string(property.value)))
+          .collect::<Vec<_>>()
+          .join(",\n"),
+        Content::String => "string".to_string(),
+        Content::Integer => "number".to_string(),
+        Content::Number => "number".to_string(),
+        Content::Boolean => "boolean".to_string(),
+        Content::Array(content) => content_to_string(*content),
+      }
+    }
+
+    method
+      .request_body_opt
+      .map(|request_body| format!("type Type={{{}}}", content_to_string(request_body)))
   }
 
   #[cfg(test)]
@@ -291,6 +368,7 @@ pub mod apis {
         param_map: hashmap! {"userId".to_string() => ParamType::String},
         method_map: hashmap! {
           "get".to_string() => Method{
+            operation_id: "get-users-userId".to_string(),
             summary: "候補者詳細GET".to_string(),
             response_opt: Some(Content::Object(vec![
               Property{key: "hogeId".to_string(), value: Content::String},
@@ -299,6 +377,7 @@ pub mod apis {
            request_body_opt: None
            },
           "put".to_string() => Method{
+            operation_id: "put-users-userId".to_string(),
             summary: "候補者詳細PUT".to_string(),
             response_opt:  None,
             request_body_opt:  Some(Content::Object(vec![
@@ -314,13 +393,78 @@ pub mod apis {
   }
 
   #[test]
-  fn it_to_play_path() {
+  fn it_to_play_routings() {
     let api = Api {
       path: "/users/{userId}".to_string(),
-      param_map: HashMap::new(),
-      method_map: HashMap::new(),
+      param_map: hashmap! {"userId".to_string() => ParamType::String},
+      method_map: hashmap! {
+        "get".to_string() => Method{
+          operation_id: "get-users-userId".to_string(),
+          summary: "候補者詳細GET".to_string(),
+          response_opt: None,
+         request_body_opt: None
+         },
+        "put".to_string() => Method{
+          operation_id: "put-users-userId".to_string(),
+          summary: "候補者詳細PUT".to_string(),
+          response_opt:  None,
+          request_body_opt: None
+        },
+      },
     };
 
-    assert_eq!("/users/:userId", to_play_path(api));
+    assert_eq!(
+      vec![
+        "GET /users/:userId {Method Name}(userId: String)",
+        "PUT /users/:userId {Method Name}(userId: String)"
+      ]
+      .sort(),
+      to_play_routings(api).sort()
+    );
+  }
+
+  #[test]
+  fn it_generate_command_scala() {
+    let method = Method {
+      operation_id: "put-users-userId".to_string(),
+      summary: "候補者詳細PUT".to_string(),
+      response_opt: None,
+      request_body_opt: Some(Content::Object(vec![
+        Property {
+          key: "hasDateAndPlace".to_string(),
+          value: Content::String,
+        },
+        Property {
+          key: "location".to_string(),
+          value: Content::String,
+        },
+      ])),
+    };
+    assert_eq!(
+      Some("case class Class(hasDateAndPlace: String,\nlocation: String)".to_string()),
+      generate_command_scala(method)
+    )
+  }
+  #[test]
+  fn it_generate_command_ts() {
+    let method = Method {
+      operation_id: "put-users-userId".to_string(),
+      summary: "候補者詳細PUT".to_string(),
+      response_opt: None,
+      request_body_opt: Some(Content::Object(vec![
+        Property {
+          key: "hasDateAndPlace".to_string(),
+          value: Content::String,
+        },
+        Property {
+          key: "location".to_string(),
+          value: Content::String,
+        },
+      ])),
+    };
+    assert_eq!(
+      Some("type Type={hasDateAndPlace: string,\nlocation: string}".to_string()),
+      generate_command_ts(method)
+    )
   }
 }
