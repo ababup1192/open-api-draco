@@ -175,7 +175,17 @@ pub mod apis {
                           .collect::<Vec<_>>();
                         if prop_types.len() == 1 {
                           match prop_types[0].as_str() {
-                            Some("string") => Content::String,
+                            Some("string") => base_doument["properties"][key]["format"]
+                              .clone()
+                              .as_str()
+                              .map(|format| {
+                                if format == "date" {
+                                  Content::Date
+                                } else {
+                                  panic!("unsupported format type: {}", format)
+                                }
+                              })
+                              .unwrap_or(Content::String),
                             Some("integer") => Content::Integer,
                             Some("number") => Content::Number,
                             Some("boolean") => Content::Boolean,
