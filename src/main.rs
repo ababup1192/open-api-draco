@@ -249,46 +249,58 @@ pub mod apis {
       .collect()
   }
 
-  pub fn generate_command_scala(method: Method) -> Option<String> {
-    fn content_to_string(content: Content) -> String {
-      match content {
-        Content::Object(properties) => properties
-          .into_iter()
-          .map(|property| format!("{}: {}", property.key, content_to_string(property.value)))
-          .collect::<Vec<_>>()
-          .join(",\n"),
-        Content::String => "String".to_string(),
-        Content::Integer => "Int or Long".to_string(),
-        Content::Number => "Float".to_string(),
-        Content::Boolean => "Boolean".to_string(),
-        Content::Array(content) => content_to_string(*content),
-      }
+  fn content_to_string_scala(content: Content) -> String {
+    match content {
+      Content::Object(properties) => properties
+        .into_iter()
+        .map(|property| format!("{}: {}", property.key, content_to_string_scala(property.value)))
+        .collect::<Vec<_>>()
+        .join(",\n"),
+      Content::String => "String".to_string(),
+      Content::Integer => "Int or Long".to_string(),
+      Content::Number => "Float".to_string(),
+      Content::Boolean => "Boolean".to_string(),
+      Content::Array(content) => content_to_string_scala(*content),
     }
+  }
 
+  fn content_to_string_ts(content: Content) -> String {
+    match content {
+      Content::Object(properties) => properties
+        .into_iter()
+        .map(|property| format!("{}: {}", property.key, content_to_string_ts(property.value)))
+        .collect::<Vec<_>>()
+        .join(",\n"),
+      Content::String => "string".to_string(),
+      Content::Integer => "number".to_string(),
+      Content::Number => "number".to_string(),
+      Content::Boolean => "boolean".to_string(),
+      Content::Array(content) => content_to_string_ts(*content),
+    }
+  }
+
+  pub fn generate_command_scala(method: Method) -> Option<String> {
     method
       .request_body_opt
-      .map(|request_body| format!("case class Class({})", content_to_string(request_body)))
+      .map(|request_body| format!("case class Command({})", content_to_string_scala(request_body)))
   }
 
   pub fn generate_command_ts(method: Method) -> Option<String> {
-    fn content_to_string(content: Content) -> String {
-      match content {
-        Content::Object(properties) => properties
-          .into_iter()
-          .map(|property| format!("{}: {}", property.key, content_to_string(property.value)))
-          .collect::<Vec<_>>()
-          .join(",\n"),
-        Content::String => "string".to_string(),
-        Content::Integer => "number".to_string(),
-        Content::Number => "number".to_string(),
-        Content::Boolean => "boolean".to_string(),
-        Content::Array(content) => content_to_string(*content),
-      }
-    }
-
     method
       .request_body_opt
-      .map(|request_body| format!("type Type={{{}}}", content_to_string(request_body)))
+      .map(|request_body| format!("type Command={{{}}}", content_to_string_ts(request_body)))
+  }
+
+  pub fn generate_view_model_scala(method: Method) -> Option<String> {
+    method
+      .response_opt
+      .map(|response| format!("case class ViewModel({})", content_to_string_scala(response)))
+  }
+
+  pub fn generate_view_model_ts(method: Method) -> Option<String> {
+    method
+      .response_opt
+      .map(|response| format!("type ViewModel={{{}}}", content_to_string_ts(response)))
   }
 
   #[cfg(test)]
@@ -441,7 +453,7 @@ pub mod apis {
       ])),
     };
     assert_eq!(
-      Some("case class Class(hasDateAndPlace: String,\nlocation: String)".to_string()),
+      Some("case class Command(hasDateAndPlace: String,\nlocation: String)".to_string()),
       generate_command_scala(method)
     )
   }
@@ -463,7 +475,7 @@ pub mod apis {
       ])),
     };
     assert_eq!(
-      Some("type Type={hasDateAndPlace: string,\nlocation: string}".to_string()),
+      Some("type Command={hasDateAndPlace: string,\nlocation: string}".to_string()),
       generate_command_ts(method)
     )
   }
