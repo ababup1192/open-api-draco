@@ -107,6 +107,7 @@ pub mod apis {
   pub struct Property {
     pub key: String,
     pub value: Content,
+    pub or_null: bool,
   }
 
   pub fn from_yaml(yaml: &yaml_rust::Yaml) -> Vec<Api> {
@@ -143,21 +144,47 @@ pub mod apis {
 
             let properties = property_keys
               .into_iter()
-              .map(|key| Property {
-                key: key.to_string(),
-                value: {
-                  let prop_type_text = base_doument["properties"][key]["type"].as_str();
+              .map(|key| {
+                let prop_type = base_doument["properties"][key]["type"].clone();
 
-                  match prop_type_text {
-                    Some("string") => Content::String,
-                    Some("integer") => Content::Integer,
-                    _ => panic!(
-                      "unsuppoted property type: ({}: {})",
-                      key,
-                      prop_type_text.unwrap_or("None")
-                    ),
-                  }
-                },
+                Property {
+                  key: key.to_string(),
+                  value: {
+                    match prop_type.as_str() {
+                      Some("string") => Content::String,
+                      Some("integer") => Content::Integer,
+                      None => {
+                        let prop_types = prop_type
+                          .clone()
+                          .into_iter()
+                          .filter(|t| t.as_str() != Some("null"))
+                          .collect::<Vec<_>>();
+                        if prop_types.len() == 1 {
+                          match prop_types[0].as_str() {
+                            Some("string") => Content::String,
+                            Some("integer") => Content::Integer,
+                            _ => panic!(
+                              "unsuppoted property type: ({}: {})",
+                              key,
+                              prop_types[0].as_str().unwrap_or("None")
+                            ),
+                          }
+                        } else {
+                          panic!("property type must have num of 2.")
+                        }
+                      }
+                      _ => panic!(
+                        "unsuppoted property type: ({}: {})",
+                        key,
+                        prop_type.as_str().unwrap_or("None")
+                      ),
+                    }
+                  },
+                  or_null: prop_type.into_iter().any(|t| {
+                    println!("{:?}", t.as_str() == Some("null"));
+                    t.as_str() == Some("null")
+                  }),
+                }
               })
               .collect::<Vec<_>>();
 
@@ -355,62 +382,64 @@ pub mod apis {
     #[test]
     fn it_from_yaml() {
       let yaml = "
-        openapi: 3.0.0
-        info:
-          title: local
-          version: '1.0'
-        servers:
-          - url: 'http://localhost:3000'
-        paths:
-          '/users/{userId}':
-            parameters:
-              - schema:
+openapi: 3.0.0
+info:
+  title: local
+  version: '1.0'
+servers:
+  - url: 'http://localhost:3000'
+paths:
+  '/users/{userId}':
+    parameters:
+      - schema:
+          type: string
+        name: userId
+        in: path
+        description: ''
+    get:
+      summary: 候補者詳細GET
+      tags: []
+      responses:
+        '200':
+          description: OK
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hogeId:
+                    type: string
+                  foo:
+                    type:
+                      - integer
+                      - 'null'
+      operationId: get-users-userId
+      description: 候補者詳細GET
+    put:
+      summary: 候補者詳細PUT
+      operationId: put-users-userId
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hasDateAndPlace:
                   type: string
-                name: userId
-                in: path
-                required: true
-              
-            get:
-              summary: 候補者詳細GET
-              tags: []
-              responses:
-                '200':
-                  description: OK
-                  headers: {}
-                  content:
-                    application/json:
-                      schema:
-                        type: object
-                        properties:
-                          hogeId:
-                            type: string
-                          foo:
-                            type: integer
-              operationId: get-users-userId
-            put:
-              summary: 候補者詳細PUT
-              operationId: put-users-userId
-              responses:
-                '200':
-                  description: OK
-              requestBody:
-                content:
-                  application/json:
-                    schema:
-                      type: object
-                      properties:
-                        hasDateAndPlace:
-                          type: string
-                          maxLength: 100
-                        location:
-                          type: string
-                          enum:
-                            - S
-                            - A
-                            - B
-                            - NG
-        components:
-          schemas: {}
+                location:
+                  type: string
+                  enum:
+                    - S
+                    - A
+                    - B
+                    - NG
+      description: 候補者詳細PUT
+components:
+  schemas: {}    
             ";
 
       let docs = YamlLoader::load_from_str(yaml).unwrap();
@@ -426,8 +455,8 @@ pub mod apis {
             operation_id: "get-users-userId".to_string(),
             summary: "候補者詳細GET".to_string(),
             response_opt: Some(Content::Object(vec![
-              Property{key: "hogeId".to_string(), value: Content::String},
-              Property{key: "foo".to_string(), value: Content::Integer}
+              Property{key: "hogeId".to_string(), value: Content::String, or_null: false},
+              Property{key: "foo".to_string(), value: Content::Integer, or_null: true}
             ])),
            request_body_opt: None
            },
@@ -436,8 +465,8 @@ pub mod apis {
             summary: "候補者詳細PUT".to_string(),
             response_opt:  None,
             request_body_opt:  Some(Content::Object(vec![
-              Property{key: "hasDateAndPlace".to_string(), value: Content::String},
-              Property{key: "location".to_string(), value: Content::String}
+              Property{key: "hasDateAndPlace".to_string(), value: Content::String, or_null: false},
+              Property{key: "location".to_string(), value: Content::String, or_null: false}
             ]))
           },
         },
@@ -468,12 +497,12 @@ pub mod apis {
       },
     };
 
-    let expected = vec![
+    let mut expected = vec![
       "GET /users/:userId {Method Name}(userId: String)",
       "PUT /users/:userId {Method Name}(userId: String)",
     ];
 
-    let actual = to_play_routings(api);
+    let mut actual = to_play_routings(api);
 
     expected.sort();
     actual.sort();
@@ -491,10 +520,12 @@ pub mod apis {
         Property {
           key: "hasDateAndPlace".to_string(),
           value: Content::String,
+          or_null: false,
         },
         Property {
           key: "location".to_string(),
           value: Content::String,
+          or_null: false,
         },
       ])),
     };
@@ -513,10 +544,12 @@ pub mod apis {
         Property {
           key: "hasDateAndPlace".to_string(),
           value: Content::String,
+          or_null: false,
         },
         Property {
           key: "location".to_string(),
           value: Content::String,
+          or_null: false,
         },
       ])),
     };
