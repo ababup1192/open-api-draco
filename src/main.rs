@@ -153,6 +153,8 @@ pub mod apis {
                     match prop_type.as_str() {
                       Some("string") => Content::String,
                       Some("integer") => Content::Integer,
+                      Some("number") => Content::Number,
+                      Some("boolean") => Content::Boolean,
                       None => {
                         let prop_types = prop_type
                           .clone()
@@ -163,6 +165,8 @@ pub mod apis {
                           match prop_types[0].as_str() {
                             Some("string") => Content::String,
                             Some("integer") => Content::Integer,
+                            Some("number") => Content::Number,
+                            Some("boolean") => Content::Boolean,
                             _ => panic!(
                               "unsuppoted property type: ({}: {})",
                               key,
@@ -284,7 +288,9 @@ pub mod apis {
           "{} {} {{Method Name}}({})",
           match &method_type[..] {
             "get" => "GET",
+            "post" => "POST",
             "put" => "PUT",
+            "delete" => "DELETE",
             m => panic!("unsupported method type {}", m),
           },
           nomalize_play_variable_path(api.path.clone()),
@@ -382,64 +388,64 @@ pub mod apis {
     #[test]
     fn it_from_yaml() {
       let yaml = "
-openapi: 3.0.0
-info:
-  title: local
-  version: '1.0'
-servers:
-  - url: 'http://localhost:3000'
-paths:
-  '/users/{userId}':
-    parameters:
-      - schema:
-          type: string
-        name: userId
-        in: path
-        description: ''
-    get:
-      summary: 候補者詳細GET
-      tags: []
-      responses:
-        '200':
-          description: OK
-          headers: {}
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  hogeId:
-                    type: string
-                  foo:
-                    type:
-                      - integer
-                      - 'null'
-      operationId: get-users-userId
-      description: 候補者詳細GET
-    put:
-      summary: 候補者詳細PUT
-      operationId: put-users-userId
-      responses:
-        '200':
-          description: OK
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                hasDateAndPlace:
-                  type: string
-                location:
-                  type: string
-                  enum:
-                    - S
-                    - A
-                    - B
-                    - NG
-      description: 候補者詳細PUT
-components:
-  schemas: {}    
+      openapi: 3.0.0
+      info:
+        title: local
+        version: '1.0'
+      servers:
+        - url: 'http://localhost:3000'
+      paths:
+        '/users/{userId}':
+          parameters:
+            - schema:
+                type: string
+              name: userId
+              in: path
+              description: ''
+          get:
+            summary: 候補者詳細GET
+            tags: []
+            responses:
+              '200':
+                description: OK
+                headers: {}
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      properties:
+                        hogeId:
+                          type: boolean
+                        foo:
+                          type:
+                            - integer
+                            - 'null'
+            operationId: get-users-userId
+            description: 候補者詳細GET
+          put:
+            summary: 候補者詳細PUT
+            operationId: put-users-userId
+            responses:
+              '200':
+                description: OK
+            requestBody:
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      hasDateAndPlace:
+                        type: string
+                      location:
+                        type: string
+                        enum:
+                          - S
+                          - A
+                          - B
+                          - NG
+            description: 候補者詳細PUT
+      components:
+        schemas: {}            
             ";
 
       let docs = YamlLoader::load_from_str(yaml).unwrap();
@@ -455,7 +461,7 @@ components:
             operation_id: "get-users-userId".to_string(),
             summary: "候補者詳細GET".to_string(),
             response_opt: Some(Content::Object(vec![
-              Property{key: "hogeId".to_string(), value: Content::String, or_null: false},
+              Property{key: "hogeId".to_string(), value: Content::Boolean, or_null: false},
               Property{key: "foo".to_string(), value: Content::Integer, or_null: true}
             ])),
            request_body_opt: None
