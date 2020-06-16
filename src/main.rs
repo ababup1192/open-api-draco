@@ -101,6 +101,7 @@ pub mod apis {
     Integer,
     Number,
     Boolean,
+    Date,
   }
 
   #[derive(PartialEq, Clone, Debug)]
@@ -151,10 +152,21 @@ pub mod apis {
                   key: key.to_string(),
                   value: {
                     match prop_type.as_str() {
-                      Some("string") => Content::String,
+                      Some("string") => base_doument["properties"][key]["format"]
+                        .clone()
+                        .as_str()
+                        .map(|format| {
+                          if format == "date" {
+                            Content::Date
+                          } else {
+                            panic!("unsupported format type: {}", format)
+                          }
+                        })
+                        .unwrap_or(Content::String),
                       Some("integer") => Content::Integer,
                       Some("number") => Content::Number,
                       Some("boolean") => Content::Boolean,
+                      // type is list
                       None => {
                         let prop_types = prop_type
                           .clone()
@@ -174,7 +186,7 @@ pub mod apis {
                             ),
                           }
                         } else {
-                          panic!("property type must have num of 2.")
+                          panic!("property type must have num of 2. info: {:?}", prop_types)
                         }
                       }
                       _ => panic!(
@@ -184,10 +196,7 @@ pub mod apis {
                       ),
                     }
                   },
-                  or_null: prop_type.into_iter().any(|t| {
-                    println!("{:?}", t.as_str() == Some("null"));
-                    t.as_str() == Some("null")
-                  }),
+                  or_null: prop_type.into_iter().any(|t| t.as_str() == Some("null")),
                 }
               })
               .collect::<Vec<_>>();
@@ -313,7 +322,7 @@ pub mod apis {
       .collect()
   }
 
-  fn content_to_string_scala(content: Content) -> String {
+  fn content_to_string_scala(content: Content, is_command: bool) -> String {
     match content {
       Content::Object(properties) => properties
         .into_iter()
@@ -321,7 +330,7 @@ pub mod apis {
           format!(
             "{}: {}",
             property.key,
-            content_to_string_scala(property.value)
+            content_to_string_scala(property.value, is_command)
           )
         })
         .collect::<Vec<_>>()
@@ -330,7 +339,13 @@ pub mod apis {
       Content::Integer => "Int or Long".to_string(),
       Content::Number => "Float".to_string(),
       Content::Boolean => "Boolean".to_string(),
-      Content::Array(content) => content_to_string_scala(*content),
+      Content::Date => (if is_command {
+        "ZonedDateTime"
+      } else {
+        "Instant"
+      })
+      .to_string(),
+      Content::Array(content) => content_to_string_scala(*content, is_command),
     }
   }
 
@@ -345,6 +360,7 @@ pub mod apis {
       Content::Integer => "number".to_string(),
       Content::Number => "number".to_string(),
       Content::Boolean => "boolean".to_string(),
+      Content::Date => "Date".to_string(),
       Content::Array(content) => content_to_string_ts(*content),
     }
   }
@@ -353,7 +369,7 @@ pub mod apis {
     method.request_body_opt.map(|request_body| {
       format!(
         "case class Command({})",
-        content_to_string_scala(request_body)
+        content_to_string_scala(request_body, true)
       )
     })
   }
@@ -368,7 +384,7 @@ pub mod apis {
     method.response_opt.map(|response| {
       format!(
         "case class ViewModel({})",
-        content_to_string_scala(response)
+        content_to_string_scala(response, false)
       )
     })
   }
@@ -420,6 +436,9 @@ pub mod apis {
                           type:
                             - integer
                             - 'null'
+                        bar_at:
+                          type: string
+                          format: date
             operationId: get-users-userId
             description: 候補者詳細GET
           put:
@@ -445,7 +464,7 @@ pub mod apis {
                           - NG
             description: 候補者詳細PUT
       components:
-        schemas: {}            
+        schemas: {}                 
             ";
 
       let docs = YamlLoader::load_from_str(yaml).unwrap();
@@ -462,7 +481,8 @@ pub mod apis {
             summary: "候補者詳細GET".to_string(),
             response_opt: Some(Content::Object(vec![
               Property{key: "hogeId".to_string(), value: Content::Boolean, or_null: false},
-              Property{key: "foo".to_string(), value: Content::Integer, or_null: true}
+              Property{key: "foo".to_string(), value: Content::Integer, or_null: true},
+              Property{key: "bar_at".to_string(), value: Content::Date, or_null: false}
             ])),
            request_body_opt: None
            },
