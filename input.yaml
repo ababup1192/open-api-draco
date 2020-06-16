@@ -1,0 +1,56 @@
+openapi: 3.0.0
+info:
+  title: local
+  version: "1.0"
+servers:
+  - url: "http://localhost:3000"
+paths:
+  "/users/{userId}":
+    parameters:
+      - schema:
+          type: integer
+        name: userId
+        in: path
+        required: true
+        description: ""
+    get:
+      summary: 候補者詳細GET
+      tags: []
+      responses:
+        "200":
+          description: OK
+          headers: {}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hogeId:
+                    type: string
+                  foo:
+                    type: integer
+      operationId: get-users-userId
+    put:
+      summary: 候補者詳細POST
+      operationId: put-users-userId
+      responses:
+        "200":
+          description: OK
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hasDateAndPlace:
+                  type: string
+                  maxLength: 100
+                location:
+                  type: string
+                  enum:
+                    - S
+                    - A
+                    - B
+                    - NG
+components:
+  schemas: {}

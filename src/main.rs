@@ -1,43 +1,74 @@
 extern crate yaml_rust;
-use yaml_rust::{YamlEmitter, YamlLoader};
+use std::env;
+use std::fs;
+use yaml_rust::YamlLoader;
 extern crate regex;
-#[macro_use]
-extern crate maplit;
 
-fn main() {
-  let s = "
-foo:
-    - list1
-    - list2
-bar:
-    - 1
-    - 2.0
-";
-  let docs = YamlLoader::load_from_str(s).unwrap();
+fn main() -> std::io::Result<()> {
+  let args: Vec<String> = env::args().collect();
+  if args.len() > 0 {
+    let yaml = fs::read_to_string(&*args[1])?;
+    let docs = YamlLoader::load_from_str(&*yaml).unwrap();
+    let doc = &docs[0];
 
-  // Multi document support, doc is a yaml::Yaml
-  let doc = &docs[0];
+    fs::remove_dir_all("dist")?;
+    fs::create_dir("dist")?;
+    let apis = apis::from_yaml(doc);
+    for api in apis {
+      let mut routes = apis::to_play_routings(api.clone());
+      routes.sort();
 
-  // Debug support
-  println!("{:?}", doc);
+      fs::write("dist/routes", routes.join("\n"))?;
+      for ref method in api.method_map.values() {
+        let m = method.clone();
+        // create command
+        let command_scala_opt = apis::generate_command_scala(m.clone());
 
-  // Index access for map & array
-  assert_eq!(doc["foo"][0].as_str().unwrap(), "list1");
-  assert_eq!(doc["bar"][1].as_f64().unwrap(), 2.0);
+        for command_scala in command_scala_opt.iter() {
+          let ref dir = format!("dist/{}/command", m.clone().operation_id);
+          fs::create_dir_all(dir)?;
+          let file = format!("{}/{}.scala", dir, m.clone().operation_id);
+          fs::write(file, command_scala)?;
+        }
 
-  // Chained key/array access is checked and won't panic,
-  // return BadValue if they are not exist.
-  assert!(doc["INVALID_KEY"][100].is_badvalue());
+        let command_ts_opt = apis::generate_command_ts(m.clone());
 
-  // Dump the YAML object
-  let mut out_str = String::new();
-  {
-    let mut emitter = YamlEmitter::new(&mut out_str);
-    emitter.dump(doc).unwrap(); // dump the YAML object to a String
+        for command_ts in command_ts_opt.iter() {
+          let ref dir = format!("dist/{}/command", m.clone().operation_id);
+          fs::create_dir_all(dir)?;
+          let file = format!("{}/{}.ts", dir, m.clone().operation_id);
+          fs::write(file, command_ts)?;
+        }
+
+        // create view model
+        let view_model_scala_opt = apis::generate_view_model_scala(m.clone());
+
+        for view_model_scala in view_model_scala_opt.iter() {
+          let ref dir = format!("dist/{}/viewmodel", m.clone().operation_id);
+          fs::create_dir_all(dir)?;
+          let file = format!("{}/{}.scala", dir, m.clone().operation_id);
+          fs::write(file, view_model_scala)?;
+        }
+
+        let view_model_ts_opt = apis::generate_view_model_ts(m.clone());
+
+        for view_model_ts in view_model_ts_opt.iter() {
+          let ref dir = format!("dist/{}/viewmodel", m.clone().operation_id);
+          fs::create_dir_all(dir)?;
+          let file = format!("{}/{}.ts", dir, m.clone().operation_id);
+          fs::write(file, view_model_ts)?;
+        }
+      }
+    }
+
+    Ok(())
+  } else {
+    panic!("command use: ./draco-open-api input.yaml")
   }
-  println!("{}", out_str);
 }
 
+#[macro_use]
+extern crate maplit;
 pub mod apis {
   use std::collections::HashMap;
 
@@ -253,7 +284,13 @@ pub mod apis {
     match content {
       Content::Object(properties) => properties
         .into_iter()
-        .map(|property| format!("{}: {}", property.key, content_to_string_scala(property.value)))
+        .map(|property| {
+          format!(
+            "{}: {}",
+            property.key,
+            content_to_string_scala(property.value)
+          )
+        })
         .collect::<Vec<_>>()
         .join(",\n"),
       Content::String => "String".to_string(),
@@ -280,9 +317,12 @@ pub mod apis {
   }
 
   pub fn generate_command_scala(method: Method) -> Option<String> {
-    method
-      .request_body_opt
-      .map(|request_body| format!("case class Command({})", content_to_string_scala(request_body)))
+    method.request_body_opt.map(|request_body| {
+      format!(
+        "case class Command({})",
+        content_to_string_scala(request_body)
+      )
+    })
   }
 
   pub fn generate_command_ts(method: Method) -> Option<String> {
@@ -292,9 +332,12 @@ pub mod apis {
   }
 
   pub fn generate_view_model_scala(method: Method) -> Option<String> {
-    method
-      .response_opt
-      .map(|response| format!("case class ViewModel({})", content_to_string_scala(response)))
+    method.response_opt.map(|response| {
+      format!(
+        "case class ViewModel({})",
+        content_to_string_scala(response)
+      )
+    })
   }
 
   pub fn generate_view_model_ts(method: Method) -> Option<String> {
@@ -425,14 +468,17 @@ pub mod apis {
       },
     };
 
-    assert_eq!(
-      vec![
-        "GET /users/:userId {Method Name}(userId: String)",
-        "PUT /users/:userId {Method Name}(userId: String)"
-      ]
-      .sort(),
-      to_play_routings(api).sort()
-    );
+    let expected = vec![
+      "GET /users/:userId {Method Name}(userId: String)",
+      "PUT /users/:userId {Method Name}(userId: String)",
+    ];
+
+    let actual = to_play_routings(api);
+
+    expected.sort();
+    actual.sort();
+
+    assert_eq!(expected, actual);
   }
 
   #[test]
