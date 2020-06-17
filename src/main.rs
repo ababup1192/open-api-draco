@@ -362,7 +362,7 @@ pub mod apis {
         "Instant"
       })
       .to_string(),
-      Content::Array(content) => content_to_string_scala(*content, is_command),
+      Content::Array(content) => format!("Seq[{}]", content_to_string_scala(*content, is_command)),
     }
   }
 
@@ -378,7 +378,7 @@ pub mod apis {
       Content::Number => "number".to_string(),
       Content::Boolean => "boolean".to_string(),
       Content::Date => "Date".to_string(),
-      Content::Array(content) => content_to_string_ts(*content),
+      Content::Array(content) => content_to_string_ts(*content) + "[]",
     }
   }
 
@@ -620,10 +620,18 @@ pub mod apis {
           value: Content::String,
           or_null: false,
         },
+        Property {
+          key: "idList".to_string(),
+          value: Content::Array(Box::new(Content::String)),
+          or_null: false,
+        },
       ])),
     };
     assert_eq!(
-      Some("case class Command(hasDateAndPlace: String,\nlocation: String)".to_string()),
+      Some(
+        "case class Command(hasDateAndPlace: String,\nlocation: String,\nidList: Seq[String])"
+          .to_string()
+      ),
       generate_command_scala(method)
     )
   }
@@ -644,10 +652,17 @@ pub mod apis {
           value: Content::String,
           or_null: false,
         },
+        Property {
+          key: "idList".to_string(),
+          value: Content::Array(Box::new(Content::String)),
+          or_null: false,
+        },
       ])),
     };
     assert_eq!(
-      Some("type Command={hasDateAndPlace: string,\nlocation: string}".to_string()),
+      Some(
+        "type Command={hasDateAndPlace: string,\nlocation: string,\nidList: string[]}".to_string()
+      ),
       generate_command_ts(method)
     )
   }
