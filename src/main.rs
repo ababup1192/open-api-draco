@@ -212,6 +212,9 @@ pub mod apis {
               .collect::<Vec<_>>();
 
             Some(Content::Object(properties))
+          } else if schema_type == "array" {
+            create_schema(base_doument["items"].clone())
+              .map(|items| Content::Array(Box::new(items)))
           } else {
             None
           }
@@ -473,6 +476,28 @@ pub mod apis {
                           - B
                           - NG
             description: 候補者詳細PUT
+        /users:
+          get:
+            summary: ユーザ取得
+            tags: []
+            responses:
+              '200':
+                description: OK
+                content:
+                  application/json:
+                    schema:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          userId:
+                            type: string
+                          age:
+                            type: integer
+            operationId: get-users
+            description: ユーザ取得
+      operationId: get-users
+      description: ユーザ取得
       components:
         schemas: {}                 
             ";
@@ -482,31 +507,48 @@ pub mod apis {
       // Multi document support, doc is a yaml::Yaml
       let doc = &docs[0];
 
-      let vec: Vec<Api> = vec![Api {
-        path: "/users/{userId}".to_string(),
-        param_map: hashmap! {"userId".to_string() => ParamType::String},
-        method_map: hashmap! {
-          "get".to_string() => Method{
-            operation_id: "get-users-userId".to_string(),
-            summary: "候補者詳細GET".to_string(),
-            response_opt: Some(Content::Object(vec![
-              Property{key: "hogeId".to_string(), value: Content::Boolean, or_null: false},
-              Property{key: "foo".to_string(), value: Content::Integer, or_null: true},
-              Property{key: "bar_at".to_string(), value: Content::Date, or_null: false}
-            ])),
-           request_body_opt: None
-           },
-          "put".to_string() => Method{
-            operation_id: "put-users-userId".to_string(),
-            summary: "候補者詳細PUT".to_string(),
-            response_opt:  None,
-            request_body_opt:  Some(Content::Object(vec![
-              Property{key: "hasDateAndPlace".to_string(), value: Content::String, or_null: false},
-              Property{key: "location".to_string(), value: Content::String, or_null: false}
-            ]))
+      let vec: Vec<Api> = vec![
+        Api {
+          path: "/users/{userId}".to_string(),
+          param_map: hashmap! {"userId".to_string() => ParamType::String},
+          method_map: hashmap! {
+            "get".to_string() => Method{
+              operation_id: "get-users-userId".to_string(),
+              summary: "候補者詳細GET".to_string(),
+              response_opt: Some(Content::Object(vec![
+                Property{key: "hogeId".to_string(), value: Content::Boolean, or_null: false},
+                Property{key: "foo".to_string(), value: Content::Integer, or_null: true},
+                Property{key: "bar_at".to_string(), value: Content::Date, or_null: false}
+              ])),
+             request_body_opt: None
+             },
+            "put".to_string() => Method{
+              operation_id: "put-users-userId".to_string(),
+              summary: "候補者詳細PUT".to_string(),
+              response_opt:  None,
+              request_body_opt:  Some(Content::Object(vec![
+                Property{key: "hasDateAndPlace".to_string(), value: Content::String, or_null: false},
+                Property{key: "location".to_string(), value: Content::String, or_null: false}
+              ]))
+            },
           },
         },
-      }];
+        Api {
+          path: "/users".to_string(),
+          param_map: HashMap::new(),
+          method_map: hashmap! {
+            "get".to_string() => Method{
+              operation_id: "get-users".to_string(),
+              summary: "ユーザ取得".to_string(),
+              response_opt: Some(Content::Array(Box::new(Content::Object(vec![
+                Property{key: "userId".to_string(), value: Content::String, or_null: false},
+                Property{key: "age".to_string(), value: Content::Integer, or_null: false},
+              ])))),
+             request_body_opt: None
+             },
+          },
+        },
+      ];
 
       assert_eq!(vec, from_yaml(&doc));
     }
