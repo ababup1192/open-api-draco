@@ -11,14 +11,15 @@ fn main() -> std::io::Result<()> {
     let docs = YamlLoader::load_from_str(&*yaml).unwrap();
     let doc = &docs[0];
 
-    fs::remove_dir_all("dist")?;
+    let remove = fs::remove_dir_all("dist");
+
+    match remove {
+      Ok(r) => r,
+      Err(_) => println!("dist create."),
+    }
     fs::create_dir("dist")?;
     let apis = apis::from_yaml(doc);
-    for api in apis {
-      let mut routes = apis::to_play_routings(api.clone());
-      routes.sort();
-
-      fs::write("dist/routes", routes.join("\n"))?;
+    for api in apis.clone() {
       for ref method in api.method_map.values() {
         let m = method.clone();
         // create command
@@ -60,6 +61,14 @@ fn main() -> std::io::Result<()> {
         }
       }
     }
+
+    let mut routes = apis
+      .iter()
+      .flat_map(|api| apis::to_play_routings(api.clone()))
+      .collect::<Vec<_>>();
+    routes.sort();
+
+    fs::write("dist/routes", routes.join("\n"))?;
 
     Ok(())
   } else {
