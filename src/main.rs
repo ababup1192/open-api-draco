@@ -398,19 +398,46 @@ pub mod apis {
     }
   }
 
-  fn content_to_string_ts(content: Content) -> String {
+  fn content_to_string_ts(type_name: String, content: Content) -> String {
     match content {
-      Content::Object(properties) => properties
-        .into_iter()
-        .map(|property| format!("{}: {}", property.key, content_to_string_ts(property.value)))
-        .collect::<Vec<_>>()
-        .join(",\n"),
+      Content::Object(properties) => {
+        format!(
+          "type {}={{{}}}",
+          type_name,
+          properties
+            .clone()
+            .into_iter()
+            .map(|property| {
+              format!(
+                "{}: {}",
+                property.key,
+                match property.value {
+                  Content::Object(_) => head_uppercase(property.key.to_string()),
+                  _ => content_to_string_ts("".to_string(), property.value),
+                }
+              )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n")
+        ) + "\n"
+          + &properties
+            .into_iter()
+            .filter(|property| match property.value {
+              Content::Object(_) => true,
+              _ => false,
+            })
+            .map(|property| {
+              content_to_string_ts(head_uppercase(property.key.to_string()), property.value)
+            })
+            .collect::<Vec<_>>()
+            .join(",\n")
+      }
       Content::String => "string".to_string(),
       Content::Integer => "number".to_string(),
       Content::Number => "number".to_string(),
       Content::Boolean => "boolean".to_string(),
       Content::Date => "Date".to_string(),
-      Content::Array(content) => content_to_string_ts(*content) + "[]",
+      Content::Array(content) => content_to_string_ts("".to_string(), *content) + "[]",
     }
   }
 
@@ -423,7 +450,7 @@ pub mod apis {
   pub fn generate_command_ts(method: Method) -> Option<String> {
     method
       .request_body_opt
-      .map(|request_body| format!("type Command={{{}}}", content_to_string_ts(request_body)))
+      .map(|request_body| content_to_string_ts("Command".to_string(), request_body))
   }
 
   pub fn generate_view_model_scala(method: Method) -> Option<String> {
@@ -435,7 +462,7 @@ pub mod apis {
   pub fn generate_view_model_ts(method: Method) -> Option<String> {
     method
       .response_opt
-      .map(|response| format!("type ViewModel={{{}}}", content_to_string_ts(response)))
+      .map(|response| content_to_string_ts("ViewModel".to_string(), response))
   }
 
   #[cfg(test)]
@@ -700,11 +727,29 @@ pub mod apis {
           value: Content::Array(Box::new(Content::String)),
           or_null: false,
         },
+        Property {
+          key: "familyCommand".to_string(),
+          value: Content::Object(vec![
+            Property {
+              key: "name".to_string(),
+              value: Content::String,
+              or_null: false,
+            },
+            Property {
+              key: "age".to_string(),
+              value: Content::Integer,
+              or_null: false,
+            },
+          ]),
+          or_null: false,
+        },
       ])),
     };
     assert_eq!(
       Some(
-        "type Command={hasDateAndPlace: string,\nlocation: string,\nidList: string[]}".to_string()
+        "type Command={hasDateAndPlace: string,\nlocation: string,\nidList: string[],\nfamilyCommand: FamilyCommand}".to_string()
+        .to_string()
+          + "\ntype FamilyCommand={name: string,\nage: number}\n"
       ),
       generate_command_ts(method)
     )
