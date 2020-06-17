@@ -625,12 +625,29 @@ pub mod apis {
           value: Content::Array(Box::new(Content::String)),
           or_null: false,
         },
+        Property {
+          key: "familyCommand".to_string(),
+          value: Content::Object(vec![
+            Property {
+              key: "name".to_string(),
+              value: Content::String,
+              or_null: false,
+            },
+            Property {
+              key: "age".to_string(),
+              value: Content::Integer,
+              or_null: false,
+            },
+          ]),
+          or_null: false,
+        },
       ])),
     };
     assert_eq!(
       Some(
-        "case class Command(hasDateAndPlace: String,\nlocation: String,\nidList: Seq[String])"
+        "case class Command(hasDateAndPlace: String,\nlocation: String,\nidList: Seq[String],\nfamilyCommand: FamilyCommand)"
           .to_string()
+          + "\ncase class FamilyCommand(name: String,\nage: Int or Long)"
       ),
       generate_command_scala(method)
     )
