@@ -339,19 +339,48 @@ pub mod apis {
       .collect()
   }
 
-  fn content_to_string_scala(content: Content, is_command: bool) -> String {
+  fn head_uppercase(str: String) -> String {
+    str[0..1].to_uppercase() + &str[1..]
+  }
+
+  fn content_to_string_scala(class_name: String, content: Content, is_command: bool) -> String {
     match content {
-      Content::Object(properties) => properties
-        .into_iter()
-        .map(|property| {
-          format!(
-            "{}: {}",
-            property.key,
-            content_to_string_scala(property.value, is_command)
-          )
-        })
-        .collect::<Vec<_>>()
-        .join(",\n"),
+      Content::Object(properties) => {
+        format!(
+          "case class {}({})",
+          class_name,
+          properties
+            .clone()
+            .into_iter()
+            .map(|property| {
+              format!(
+                "{}: {}",
+                property.key,
+                match property.value {
+                  Content::Object(_) => head_uppercase(property.key.to_string()),
+                  _ => content_to_string_scala("".to_string(), property.value, is_command),
+                }
+              )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n")
+        ) + "\n"
+          + &properties
+            .into_iter()
+            .filter(|property| match property.value {
+              Content::Object(_) => true,
+              _ => false,
+            })
+            .map(|property| {
+              content_to_string_scala(
+                head_uppercase(property.key.to_string()),
+                property.value,
+                is_command,
+              )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n")
+      }
       Content::String => "String".to_string(),
       Content::Integer => "Int or Long".to_string(),
       Content::Number => "Float".to_string(),
@@ -362,7 +391,10 @@ pub mod apis {
         "Instant"
       })
       .to_string(),
-      Content::Array(content) => format!("Seq[{}]", content_to_string_scala(*content, is_command)),
+      Content::Array(content) => format!(
+        "Seq[{}]",
+        content_to_string_scala("".to_string(), *content, is_command)
+      ),
     }
   }
 
@@ -383,12 +415,9 @@ pub mod apis {
   }
 
   pub fn generate_command_scala(method: Method) -> Option<String> {
-    method.request_body_opt.map(|request_body| {
-      format!(
-        "case class Command({})",
-        content_to_string_scala(request_body, true)
-      )
-    })
+    method
+      .request_body_opt
+      .map(|request_body| content_to_string_scala("Command".to_string(), request_body, true))
   }
 
   pub fn generate_command_ts(method: Method) -> Option<String> {
@@ -398,12 +427,9 @@ pub mod apis {
   }
 
   pub fn generate_view_model_scala(method: Method) -> Option<String> {
-    method.response_opt.map(|response| {
-      format!(
-        "case class ViewModel({})",
-        content_to_string_scala(response, false)
-      )
-    })
+    method
+      .response_opt
+      .map(|response| content_to_string_scala("ViewModel".to_string(), response, false))
   }
 
   pub fn generate_view_model_ts(method: Method) -> Option<String> {
@@ -647,7 +673,7 @@ pub mod apis {
       Some(
         "case class Command(hasDateAndPlace: String,\nlocation: String,\nidList: Seq[String],\nfamilyCommand: FamilyCommand)"
           .to_string()
-          + "\ncase class FamilyCommand(name: String,\nage: Int or Long)"
+          + "\ncase class FamilyCommand(name: String,\nage: Int or Long)\n"
       ),
       generate_command_scala(method)
     )
