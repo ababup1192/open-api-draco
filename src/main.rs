@@ -199,8 +199,12 @@ pub mod apis {
                           panic!("property type must have num of 2. info: {:?}", prop_types)
                         }
                       }
+                      Some("object") | Some("array") => {
+                        create_schema(base_doument["properties"][key].clone())
+                          .expect("fail to create nested object")
+                      }
                       _ => panic!(
-                        "unsuppoted property type: ({}: {})",
+                        "unsuppoted nested property type: ({}: {})",
                         key,
                         prop_type.as_str().unwrap_or("None")
                       ),
@@ -494,6 +498,13 @@ pub mod apis {
                             type: string
                           age:
                             type: integer
+                          family:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              age:
+                                type: integer
             operationId: get-users
             description: ユーザ取得
       operationId: get-users
@@ -543,6 +554,10 @@ pub mod apis {
               response_opt: Some(Content::Array(Box::new(Content::Object(vec![
                 Property{key: "userId".to_string(), value: Content::String, or_null: false},
                 Property{key: "age".to_string(), value: Content::Integer, or_null: false},
+                Property{key: "family".to_string(), value: Content::Object(vec![
+                  Property{key: "name".to_string(), value: Content::String, or_null: false},
+                  Property{key: "age".to_string(), value: Content::Integer, or_null: false}
+                ]), or_null: false}
               ])))),
              request_body_opt: None
              },
