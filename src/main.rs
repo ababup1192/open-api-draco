@@ -567,6 +567,13 @@ pub mod apis {
                                 type: string
                               age:
                                 type: integer
+                          objList:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                hoge:
+                                  type: string
             operationId: get-users
             description: ユーザ取得
       operationId: get-users
@@ -619,8 +626,12 @@ pub mod apis {
                 Property{key: "family".to_string(), value: Content::Object(vec![
                   Property{key: "name".to_string(), value: Content::String, or_null: false},
                   Property{key: "age".to_string(), value: Content::Integer, or_null: false}
-                ]), or_null: false}
-              ])))),
+                ]), or_null: false},
+                Property{key: "objList".to_string(), value:
+                 Content::Array(Box::new(Content::Object(vec![
+                  Property{key: "hoge".to_string(), value: Content::String, or_null: false},
+                 ]))), or_null: false}],
+              )))),
              request_body_opt: None
              },
           },
