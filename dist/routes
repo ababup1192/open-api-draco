@@ -1,2 +1,0 @@
-GET /users/:userId {Method Name}(userId: Long)
-PUT /users/:userId {Method Name}(userId: Long)

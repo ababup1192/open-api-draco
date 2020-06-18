@@ -498,7 +498,7 @@ pub mod apis {
               in: path
               description: ''
           get:
-            summary: 候補者詳細GET
+            summary: ユーザ詳細GET
             tags: []
             responses:
               '200':
@@ -519,9 +519,9 @@ pub mod apis {
                           type: string
                           format: date
             operationId: get-users-userId
-            description: 候補者詳細GET
+            description: ユーザ詳細GET
           put:
-            summary: 候補者詳細PUT
+            summary: ユーザ詳細PUT
             operationId: put-users-userId
             responses:
               '200':
@@ -541,7 +541,7 @@ pub mod apis {
                           - A
                           - B
                           - NG
-            description: 候補者詳細PUT
+            description: ユーザ詳細PUT
         /users:
           get:
             summary: ユーザ取得
@@ -587,7 +587,7 @@ pub mod apis {
           method_map: hashmap! {
             "get".to_string() => Method{
               operation_id: "get-users-userId".to_string(),
-              summary: "候補者詳細GET".to_string(),
+              summary: "ユーザ詳細GET".to_string(),
               response_opt: Some(Content::Object(vec![
                 Property{key: "hogeId".to_string(), value: Content::Boolean, or_null: false},
                 Property{key: "foo".to_string(), value: Content::Integer, or_null: true},
@@ -597,7 +597,7 @@ pub mod apis {
              },
             "put".to_string() => Method{
               operation_id: "put-users-userId".to_string(),
-              summary: "候補者詳細PUT".to_string(),
+              summary: "ユーザ詳細PUT".to_string(),
               response_opt:  None,
               request_body_opt:  Some(Content::Object(vec![
                 Property{key: "hasDateAndPlace".to_string(), value: Content::String, or_null: false},
