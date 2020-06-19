@@ -6,7 +6,7 @@ extern crate regex;
 
 fn main() -> std::io::Result<()> {
   let args: Vec<String> = env::args().collect();
-  if args.len() > 0 {
+  if !args.is_empty() {
     let yaml = fs::read_to_string(&*args[1])?;
     let docs = YamlLoader::load_from_str(&*yaml).unwrap();
     let doc = &docs[0];
@@ -20,13 +20,13 @@ fn main() -> std::io::Result<()> {
     fs::create_dir("dist")?;
     let apis = apis::from_yaml(doc);
     for api in apis.clone() {
-      for ref method in api.method_map.values() {
+      for method in api.method_map.values() {
         let m = method.clone();
         // create command
         let command_scala_opt = apis::generate_command_scala(m.clone());
 
         for command_scala in command_scala_opt.iter() {
-          let ref dir = format!("dist/{}/command", m.clone().operation_id);
+          let dir = &format!("dist/{}/command", m.clone().operation_id);
           fs::create_dir_all(dir)?;
           let file = format!("{}/{}.scala", dir, m.clone().operation_id);
           fs::write(file, command_scala)?;
@@ -35,7 +35,7 @@ fn main() -> std::io::Result<()> {
         let command_ts_opt = apis::generate_command_ts(m.clone());
 
         for command_ts in command_ts_opt.iter() {
-          let ref dir = format!("dist/{}/command", m.clone().operation_id);
+          let dir = &format!("dist/{}/command", m.clone().operation_id);
           fs::create_dir_all(dir)?;
           let file = format!("{}/{}.ts", dir, m.clone().operation_id);
           fs::write(file, command_ts)?;
@@ -45,7 +45,7 @@ fn main() -> std::io::Result<()> {
         let view_model_scala_opt = apis::generate_view_model_scala(m.clone());
 
         for view_model_scala in view_model_scala_opt.iter() {
-          let ref dir = format!("dist/{}/viewmodel", m.clone().operation_id);
+          let dir = &format!("dist/{}/viewmodel", m.clone().operation_id);
           fs::create_dir_all(dir)?;
           let file = format!("{}/{}.scala", dir, m.clone().operation_id);
           fs::write(file, view_model_scala)?;
@@ -54,7 +54,7 @@ fn main() -> std::io::Result<()> {
         let view_model_ts_opt = apis::generate_view_model_ts(m.clone());
 
         for view_model_ts in view_model_ts_opt.iter() {
-          let ref dir = format!("dist/{}/viewmodel", m.clone().operation_id);
+          let dir = &format!("dist/{}/viewmodel", m.clone().operation_id);
           fs::create_dir_all(dir)?;
           let file = format!("{}/{}.ts", dir, m.clone().operation_id);
           fs::write(file, view_model_ts)?;
@@ -291,22 +291,21 @@ pub mod apis {
   pub fn nomalize_play_variable_path(path: String) -> String {
     use regex::Regex;
 
-    let modify_identifer = (|| {
+    let modify_identifer = {
       let variable_reg = Regex::new(r"^\{.*\}$").unwrap();
       let blace_reg = Regex::new(r"[{}]").unwrap();
 
-      let f = move |variable: String| {
+      move |variable: String| {
         if variable_reg.is_match(&variable) {
           format!(":{}", blace_reg.replace_all(&variable, ""))
         } else {
           variable
         }
-      };
-      f
-    })();
+      }
+    };
 
     path
-      .split("/")
+      .split('/')
       .map(|variable| modify_identifer(variable.to_string()))
       .collect::<Vec<String>>()
       .join("/")
@@ -317,7 +316,6 @@ pub mod apis {
       .method_map
       .clone()
       .keys()
-      .into_iter()
       .map(|method_type| {
         format!(
           "{} {} {{Method Name}}({})",
