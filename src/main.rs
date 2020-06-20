@@ -135,32 +135,46 @@ pub mod apis {
       )
     };
 
-    fn create_method(method: yaml_rust::Yaml) -> Method {
-      let request_body_schema =
-        method["requestBody"]["content"]["application/json"]["schema"].clone();
+    fn parse_properties(base_doument: yaml_rust::Yaml) -> Vec<Property> {
+      let property_keys = base_doument["properties"]
+        .as_hash()
+        .expect("can not get object properties")
+        .keys()
+        .map(|key| key.as_str().unwrap())
+        .collect::<Vec<_>>();
 
-      let response_schema =
-        method["responses"]["200"]["content"]["application/json"]["schema"].clone();
+      property_keys
+        .into_iter()
+        .map(|key| {
+          let prop_type = base_doument["properties"][key]["type"].clone();
 
-      fn create_schema(base_doument: yaml_rust::Yaml) -> Option<Content> {
-        base_doument["type"].as_str().and_then(|schema_type| {
-          if schema_type == "object" {
-            let property_keys = base_doument["properties"]
-              .as_hash()
-              .expect("can not get object properties")
-              .keys()
-              .map(|key| key.as_str().unwrap())
-              .collect::<Vec<_>>();
-
-            let properties = property_keys
-              .into_iter()
-              .map(|key| {
-                let prop_type = base_doument["properties"][key]["type"].clone();
-
-                Property {
-                  key: key.to_string(),
-                  value: {
-                    match prop_type.as_str() {
+          Property {
+            key: key.to_string(),
+            value: {
+              match prop_type.as_str() {
+                Some("string") => base_doument["properties"][key]["format"]
+                  .clone()
+                  .as_str()
+                  .map(|format| {
+                    if format == "date" {
+                      Content::Date
+                    } else {
+                      panic!("unsupported format type: {}", format)
+                    }
+                  })
+                  .unwrap_or(Content::String),
+                Some("integer") => Content::Integer,
+                Some("number") => Content::Number,
+                Some("boolean") => Content::Boolean,
+                // type is list
+                None => {
+                  let prop_types = prop_type
+                    .clone()
+                    .into_iter()
+                    .filter(|t| t.as_str() != Some("null"))
+                    .collect::<Vec<_>>();
+                  if prop_types.len() == 1 {
+                    match prop_types[0].as_str() {
                       Some("string") => base_doument["properties"][key]["format"]
                         .clone()
                         .as_str()
@@ -175,56 +189,43 @@ pub mod apis {
                       Some("integer") => Content::Integer,
                       Some("number") => Content::Number,
                       Some("boolean") => Content::Boolean,
-                      // type is list
-                      None => {
-                        let prop_types = prop_type
-                          .clone()
-                          .into_iter()
-                          .filter(|t| t.as_str() != Some("null"))
-                          .collect::<Vec<_>>();
-                        if prop_types.len() == 1 {
-                          match prop_types[0].as_str() {
-                            Some("string") => base_doument["properties"][key]["format"]
-                              .clone()
-                              .as_str()
-                              .map(|format| {
-                                if format == "date" {
-                                  Content::Date
-                                } else {
-                                  panic!("unsupported format type: {}", format)
-                                }
-                              })
-                              .unwrap_or(Content::String),
-                            Some("integer") => Content::Integer,
-                            Some("number") => Content::Number,
-                            Some("boolean") => Content::Boolean,
-                            _ => panic!(
-                              "unsuppoted property type: ({}: {})",
-                              key,
-                              prop_types[0].as_str().unwrap_or("None")
-                            ),
-                          }
-                        } else {
-                          panic!("property type must have num of 2. info: {:?}", prop_types)
-                        }
-                      }
-                      Some("object") | Some("array") => {
-                        create_schema(base_doument["properties"][key].clone())
-                          .expect("fail to create nested object")
+                      Some("object") => {
+                        Content::Object(parse_properties(base_doument["properties"][key].clone()))
                       }
                       _ => panic!(
-                        "unsuppoted nested property type: ({}: {})",
+                        "unsuppoted property type: ({}: {})",
                         key,
-                        prop_type.as_str().unwrap_or("None")
+                        prop_types[0].as_str().unwrap_or("None")
                       ),
                     }
-                  },
-                  or_null: prop_type.into_iter().any(|t| t.as_str() == Some("null")),
+                  } else {
+                    panic!("property type must have num of 2. info: {:?}", prop_types)
+                  }
                 }
-              })
-              .collect::<Vec<_>>();
+                Some("object") | Some("array") => {
+                  create_schema(base_doument["properties"][key].clone())
+                    .expect("fail to create nested object")
+                }
+                _ => panic!(
+                  "unsuppoted nested property type: ({}: {})",
+                  key,
+                  prop_type.as_str().unwrap_or("None")
+                ),
+              }
+            },
+            or_null: prop_type.into_iter().any(|t| t.as_str() == Some("null")),
+          }
+        })
+        .collect::<Vec<_>>()
+    }
 
-            Some(Content::Object(properties))
+    fn create_schema(base_doument: yaml_rust::Yaml) -> Option<Content> {
+      base_doument["type"]
+        .clone()
+        .as_str()
+        .and_then(|schema_type| {
+          if schema_type == "object" {
+            Some(Content::Object(parse_properties(base_doument)))
           } else if schema_type == "array" {
             create_schema(base_doument["items"].clone())
               .map(|items| Content::Array(Box::new(items)))
@@ -232,7 +233,14 @@ pub mod apis {
             None
           }
         })
-      }
+    }
+
+    fn create_method(method: yaml_rust::Yaml) -> Method {
+      let request_body_schema =
+        method["requestBody"]["content"]["application/json"]["schema"].clone();
+
+      let response_schema =
+        method["responses"]["200"]["content"]["application/json"]["schema"].clone();
 
       Method {
         operation_id: method["operationId"].as_str().unwrap().to_string(),
