@@ -539,6 +539,15 @@ pub mod apis {
                           - A
                           - B
                           - NG
+                      timeMaybe:
+                        type: 
+                          - 'null'
+                          - object
+                        properties:
+                          hour:
+                            type: integer
+                          minute:
+                            type: integer
             description: ユーザ詳細PUT
         /users:
           get:
@@ -606,7 +615,11 @@ pub mod apis {
               response_opt:  None,
               request_body_opt:  Some(Content::Object(vec![
                 Property{key: "hasDateAndPlace".to_string(), value: Content::String, or_null: false},
-                Property{key: "location".to_string(), value: Content::String, or_null: false}
+                Property{key: "location".to_string(), value: Content::String, or_null: false},
+                Property{key: "timeMaybe".to_string(), value: Content::Object(vec![
+                    Property{key: "hour".to_string(), value: Content::Integer, or_null: false},
+                    Property{key: "minute".to_string(), value: Content::Integer, or_null: false}
+                ]), or_null: true},
               ]))
             },
           },
