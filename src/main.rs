@@ -136,12 +136,13 @@ pub mod apis {
     };
 
     fn parse_properties(base_doument: yaml_rust::Yaml) -> Vec<Property> {
-      let property_keys = base_doument["properties"]
-        .as_hash()
-        .expect("can not get object properties")
-        .keys()
-        .map(|key| key.as_str().unwrap())
-        .collect::<Vec<_>>();
+      let property_keys = match base_doument["properties"].as_hash() {
+        Some(hash) => hash
+          .keys()
+          .map(|key| key.as_str().unwrap())
+          .collect::<Vec<_>>(),
+        None => vec![],
+      };
 
       property_keys
         .into_iter()
@@ -394,7 +395,7 @@ pub mod apis {
               )
             })
             .collect::<Vec<_>>()
-            .join(",\n")
+            .join("\n")
       }
       Content::String => "String".to_string(),
       Content::Integer => "Int or Long".to_string(),
@@ -433,7 +434,7 @@ pub mod apis {
               )
             })
             .collect::<Vec<_>>()
-            .join(",\n")
+            .join(";\n")
         ) + "\n"
           + &properties
             .into_iter()
@@ -445,7 +446,7 @@ pub mod apis {
               content_to_string_ts(head_uppercase(property.key.to_string()), property.value)
             })
             .collect::<Vec<_>>()
-            .join(",\n")
+            .join("\n")
       }
       Content::String => "string".to_string(),
       Content::Integer => "number".to_string(),
@@ -791,9 +792,9 @@ pub mod apis {
     };
     assert_eq!(
       Some(
-        "type Command={hasDateAndPlace: string,\nlocation: string,\nidList: string[],\nfamilyCommand: FamilyCommand}".to_string()
+        "type Command={hasDateAndPlace: string;\nlocation: string;\nidList: string[];\nfamilyCommand: FamilyCommand}".to_string()
         .to_string()
-          + "\ntype FamilyCommand={name: string,\nage: number}\n"
+          + "\ntype FamilyCommand={name: string;\nage: number}\n"
       ),
       generate_command_ts(method)
     )
