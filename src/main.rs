@@ -204,7 +204,7 @@ pub mod apis {
                 }
                 Some("object") | Some("array") => {
                   create_schema(base_doument["properties"][key].clone())
-                    .expect("fail to create nested object")
+                    .expect(&format!("fail to create nested object, key: {}", key))
                 }
                 _ => panic!(
                   "unsuppoted nested property type: ({}: {})",
@@ -219,19 +219,19 @@ pub mod apis {
         .collect::<Vec<_>>()
     }
 
-    fn create_schema(base_doument: yaml_rust::Yaml) -> Option<Content> {
-      base_doument["type"]
+    fn create_schema(base_document: yaml_rust::Yaml) -> Option<Content> {
+      base_document["type"]
         .clone()
         .as_str()
-        .and_then(|schema_type| {
-          if schema_type == "object" {
-            Some(Content::Object(parse_properties(base_doument)))
-          } else if schema_type == "array" {
-            create_schema(base_doument["items"].clone())
-              .map(|items| Content::Array(Box::new(items)))
-          } else {
-            None
-          }
+        .and_then(|schema_type| match schema_type {
+          "object" => Some(Content::Object(parse_properties(base_document))),
+          "array" => create_schema(base_document["items"].clone())
+            .map(|items| Content::Array(Box::new(items))),
+          "string" => Some(Content::String),
+          "integer" => Some(Content::Integer),
+          "number" => Some(Content::Number),
+          "boolean" => Some(Content::Boolean),
+          _ => None,
         })
     }
 
@@ -524,6 +524,10 @@ pub mod apis {
                         bar_at:
                           type: string
                           format: date
+                        strList:
+                          type: array
+                          items:
+                            type: string
             operationId: get-users-userId
             description: ユーザ詳細GET
           put:
@@ -613,7 +617,8 @@ pub mod apis {
               response_opt: Some(Content::Object(vec![
                 Property{key: "hogeId".to_string(), value: Content::Boolean, or_null: false},
                 Property{key: "foo".to_string(), value: Content::Integer, or_null: true},
-                Property{key: "bar_at".to_string(), value: Content::Date, or_null: false}
+                Property{key: "bar_at".to_string(), value: Content::Date, or_null: false},
+                Property{key: "strList".to_string(), value: Content::Array(Box::new(Content::String)), or_null: false}
               ])),
              request_body_opt: None
              },
